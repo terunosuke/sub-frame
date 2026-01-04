@@ -48,11 +48,12 @@ export default async function handler(req: any, res: any) {
 
     // --- 2. APIキーの検証 (セキュリティ上、最も重要) ---
     // APIキーは、ホスティングサービスの環境変数（例: VercelのEnvironment Variables）に
-    // `API_KEY`という名前で設定する必要があります。
+    // `GEMINI_API_KEY`という名前で設定する必要があります。
     // このキーが設定されていない場合、API呼び出しは機能しません。
-    const apiKey = process.env.VITE_GEMINI_API_KEY ;
+    const apiKey = process.env.GEMINI_API_KEY;
+
     if (!apiKey) {
-        console.error("重大な設定エラー: 環境変数 'API_KEY' が設定されていません。");
+        console.error("重大な設定エラー: 環境変数 'GEMINI_API_KEY' が設定されていません。");
         // このエラーは、デプロイ環境の設定に問題があることを示します。
         return res.status(500).json({ message: "サーバー設定エラー: APIキーが設定されていません。" });
     }
