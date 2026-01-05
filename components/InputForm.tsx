@@ -1,9 +1,10 @@
 import React from 'react';
-import type { ScaffoldingConfig, CustomHeight, ValidationResults } from '../types';
+import type { ScaffoldingConfig, CustomHeight, ValidationResults, BlockGridState } from '../types';
 import { Card } from './Card';
 import { InputGroup } from './InputGroup';
 import { Alert } from './Alert';
 import { AIPdfExtractor } from './AIPdfExtractor';
+import { BlockGridEditor } from './BlockGridEditor';
 
 interface InputFormProps {
     config: ScaffoldingConfig;
@@ -15,13 +16,20 @@ interface InputFormProps {
     analysisError: string | null;
     analysisSuccess: string | null;
     onAnalyzeFile: (file: File, prompt: string) => void;
+    blockGrid: BlockGridState | null;
+    setBlockGrid: (grid: BlockGridState | null) => void;
+    onApplyBlockGrid: () => void;
+    isGridApplied: boolean;
+    onResetGrid: () => void;
 }
 
-export const InputForm: React.FC<InputFormProps> = ({ 
+export const InputForm: React.FC<InputFormProps> = ({
     config, setConfigField, setCustomHeights, setPillarSelection, validation,
-    isAnalyzing, analysisError, analysisSuccess, onAnalyzeFile
+    isAnalyzing, analysisError, analysisSuccess, onAnalyzeFile,
+    blockGrid, setBlockGrid, onApplyBlockGrid, isGridApplied, onResetGrid
 }) => {
-    
+    const [inputAssistMode, setInputAssistMode] = React.useState<'draw' | 'image' | 'manual' | null>(null);
+
     const handleCustomHeightChange = (index: number, field: keyof CustomHeight, value: number) => {
         const newHeights = [...config.customHeights];
         newHeights[index] = { ...newHeights[index], [field]: value };
@@ -35,24 +43,149 @@ export const InputForm: React.FC<InputFormProps> = ({
     const removeCustomHeightRow = (index: number) => {
         setCustomHeights(config.customHeights.filter((_, i) => i !== index));
     };
-    
-    const totalHeight = config.heightMode === 'all1700' 
-        ? config.levelCount * 1700 
+
+    const totalHeight = config.heightMode === 'all1700'
+        ? config.levelCount * 1700
         : config.customHeights.reduce((sum, item) => sum + (item.height * item.count), 0);
 
     return (
         <div className="space-y-6">
-            <AIPdfExtractor
-                isAnalyzing={isAnalyzing}
-                analysisError={analysisError}
-                analysisSuccess={analysisSuccess}
-                onAnalyze={onAnalyzeFile}
-            />
+            {/* 最上段：入力補助を利用する */}
+            <Card title="入力補助を利用する（任意）" defaultOpen>
+                <div className="p-4 space-y-4">
+                    {/* トグルボタン */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setInputAssistMode('draw')}
+                            className={`
+                                flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition-all
+                                ${inputAssistMode === 'draw'
+                                    ? 'bg-green-600 text-white ring-2 ring-green-600'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }
+                            `}
+                        >
+                            A. 絵を描く
+                        </button>
+                        <button
+                            onClick={() => setInputAssistMode('image')}
+                            className={`
+                                flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition-all
+                                ${inputAssistMode === 'image'
+                                    ? 'bg-green-600 text-white ring-2 ring-green-600'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }
+                            `}
+                        >
+                            B. 図面/画像を読み込む
+                        </button>
+                        <button
+                            onClick={() => setInputAssistMode('manual')}
+                            className={`
+                                flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition-all
+                                ${inputAssistMode === 'manual'
+                                    ? 'bg-green-600 text-white ring-2 ring-green-600'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }
+                            `}
+                        >
+                            C. 全て手動入力
+                        </button>
+                    </div>
 
-            <fieldset disabled={isAnalyzing} className="space-y-6 disabled:opacity-60 transition-opacity">
-                <Card title="大枠の設定" defaultOpen>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
-                        {/* Span Direction */}
+                    {/* コンテンツ表示 */}
+                    {inputAssistMode === 'draw' && (
+                        <div className="pt-4 border-t border-gray-200">
+                            <BlockGridEditor
+                                blockGrid={blockGrid}
+                                setBlockGrid={setBlockGrid}
+                                onApplyToConfig={onApplyBlockGrid}
+                                isGridApplied={isGridApplied}
+                                onResetGrid={onResetGrid}
+                            />
+                        </div>
+                    )}
+
+                    {inputAssistMode === 'image' && (
+                        <div className="pt-4 border-t border-gray-200">
+                            <AIPdfExtractor
+                                isAnalyzing={isAnalyzing}
+                                analysisError={analysisError}
+                                analysisSuccess={analysisSuccess}
+                                onAnalyze={onAnalyzeFile}
+                            />
+                        </div>
+                    )}
+
+                    {inputAssistMode === 'manual' && (
+                        <div className="pt-4 border-t border-gray-200 bg-blue-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-700">
+                                <strong className="text-green-700">✓ 手動入力モード</strong><br />
+                                下記の「大枠の設定」「個別部材の設定」から直接入力を開始してください。
+                            </p>
+                        </div>
+                    )}
+
+                    {inputAssistMode === null && (
+                        <div className="pt-4 border-t border-gray-200 bg-gray-50 p-4 rounded-lg text-center">
+                            <p className="text-sm text-gray-600">
+                                上記のボタンから入力方法を選択してください
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </Card>
+
+            {/* 中段１：入力フォームの解説｜大枠の設定（2列並列） */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card title="📖 使い方" defaultOpen>
+                    <div className="p-4 space-y-4 text-sm text-gray-700">
+                        <div>
+                            <p><strong className="text-green-700">■ 入力補助（任意）</strong></p>
+                            <ul className="list-disc list-inside space-y-1 ml-2">
+                                <li><strong>A.絵を描く：</strong>マス目をクリックして直感的に形を作成</li>
+                                <li><strong>B.画像読込：</strong>PDFや図面画像をAI解析</li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <p><strong className="text-green-700">■ 入力の流れ</strong></p>
+                            <ol className="list-decimal list-inside space-y-1 ml-2">
+                                <li>（任意）入力補助を利用して大枠の設定</li>
+                                <li>手動で大枠の設定（スパン・枠幅・段数・高さ）</li>
+                                <li>手動で個別部材の設定（ジャッキ・アンチ・巾木等）</li>
+                                <li>「📊拾い出し結果」タブで数量・重量を確認</li>
+                            </ol>
+                        </div>
+
+                        {/* 立面図と平面図の画像 */}
+                        <div className="pt-3 border-t border-gray-200">
+                            <p><strong className="text-green-700">■ 入力フォームの見方</strong></p>
+                            {/* 立面図と平面図 */}
+                            <div className="flex justify-center items-center gap-6 p-4 h-full">
+                                <div className="flex-1 flex justify-center">
+                                <img
+                                    src="/assets/立面図.jpg"
+                                    alt="立面図"
+                                    className="h-auto max-h-64 w-auto object-contain"
+                                />
+                                </div>
+                                <div className="flex-1 flex justify-center">
+                                <img
+                                    src="/assets/平面図.jpg"
+                                    alt="平面図"
+                                    className="h-auto max-h-64 w-auto object-contain"
+                                />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Card>
+
+                <fieldset disabled={isAnalyzing || (blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
+                    <Card title="大枠の設定" defaultOpen>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+                        {/* 1列目：スパン方向 */}
                         <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
                             <h4 className="font-semibold text-green-800">◎ スパン方向（長手）</h4>
                             <InputGroup label="600mmスパン数" type="number" value={config.span600} onChange={e => setConfigField('span600', parseInt(e.target.value) || 0)} min={0} />
@@ -61,96 +194,101 @@ export const InputForm: React.FC<InputFormProps> = ({
                             <InputGroup label="1500mmスパン数" type="number" value={config.span1500} onChange={e => setConfigField('span1500', parseInt(e.target.value) || 0)} min={0} />
                             <InputGroup label="1800mmスパン数" type="number" value={config.span1800} onChange={e => setConfigField('span1800', parseInt(e.target.value) || 0)} min={0} />
                         </div>
-                        {/* Frame Direction */}
-                        <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
-                            <h4 className="font-semibold text-green-800">◎ 枠方向（短手）</h4>
-                            <InputGroup
-                                label="450幅の列数"
-                                type="number"
-                                value={config.frameCols?.["450"] || 0}
-                                onChange={e =>
-                                    setConfigField("frameCols", {
-                                        ...config.frameCols,
-                                        "450": parseInt(e.target.value) || 0,
-                                    })
-                                }
-                                min={0}
-                            />
-                            <InputGroup
-                                label="600幅の列数"
-                                type="number"
-                                value={config.frameCols?.["600"] || 0}
-                                onChange={e =>
-                                    setConfigField("frameCols", {
-                                        ...config.frameCols,
-                                        "600": parseInt(e.target.value) || 0,
-                                    })
-                                }
-                                min={0}
-                            />
-                            <InputGroup
-                                label="900幅の列数"
-                                type="number"
-                                value={config.frameCols?.["900"] || 0}
-                                onChange={e =>
-                                    setConfigField("frameCols", {
-                                        ...config.frameCols,
-                                        "900": parseInt(e.target.value) || 0,
-                                    })
-                                }
-                                min={0}
-                            />
-                            <InputGroup
-                                label="1200幅の列数"
-                                type="number"
-                                value={config.frameCols?.["1200"] || 0}
-                                onChange={e =>
-                                    setConfigField("frameCols", {
-                                        ...config.frameCols,
-                                        "1200": parseInt(e.target.value) || 0,
-                                    })
-                                }
-                                min={0}
-                            />
-                        </div>
-                        {/* Height Direction */}
-                        <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
-                            <h4 className="font-semibold text-green-800">◎ 高さ方向</h4>
-                            <InputGroup label="段数" type="number" value={config.levelCount} onChange={e => setConfigField('levelCount', parseInt(e.target.value) || 1)} min={1} />
-                            <InputGroup label="各段の高さ" as="select" value={config.heightMode} onChange={e => setConfigField('heightMode', e.target.value as 'all1700' | 'custom')}>
-                                <option value="all1700">全段1700mm</option>
-                                <option value="custom">一部を指定する</option>
-                            </InputGroup>
-                            {config.heightMode === 'custom' && (
-                                <div className="space-y-2 pt-2 border-t border-green-200 mt-2">
-                                    {config.customHeights.map((row, index) => (
-                                        <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                                            <InputGroup label={`高さ`} hideLabel as="select" value={row.height} onChange={e => handleCustomHeightChange(index, 'height', parseInt(e.target.value))}>
-                                                <option value={1700}>1700</option>
-                                                <option value={1200}>1200</option>
-                                                <option value={900}>900</option>
-                                                <option value={600}>600</option>
-                                                <option value={400}>400</option>
-                                            </InputGroup>
-                                            <InputGroup label={`段数`} hideLabel type="number" value={row.count} min={1} onChange={e => handleCustomHeightChange(index, 'count', parseInt(e.target.value) || 1)} />
-                                            {config.customHeights.length > 1 && <button onClick={() => removeCustomHeightRow(index)} className="text-red-500 hover:text-red-700 font-bold">✖️</button>}
-                                        </div>
-                                    ))}
-                                    <button onClick={addCustomHeightRow} className="text-sm text-green-700 hover:text-green-800 font-semibold mt-2">+ 行を追加</button>
-                                    {validation.customHeightStatus === 'under' && <Alert type="warning" message={`現在 ${config.levelCount - validation.remainingLevels} 段 指定済（残り ${validation.remainingLevels} 段）`} />}
-                                    {validation.customHeightStatus === 'over' && <Alert type="error" message={`段数が超過しています！`} />}
-                                    {validation.customHeightStatus === 'ok' && <Alert type="success" message="指定段数が一致しました" />}
+
+                        {/* 2列目：枠方向 + 高さ方向 */}
+                        <div className="space-y-6">
+                            {/* 高さ方向 */}
+                            <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
+                                <h4 className="font-semibold text-green-800">◎ 高さ方向</h4>
+                                <InputGroup label="段数" type="number" value={config.levelCount} onChange={e => setConfigField('levelCount', parseInt(e.target.value) || 1)} min={1} />
+                                <InputGroup label="各段の高さ" as="select" value={config.heightMode} onChange={e => setConfigField('heightMode', e.target.value as 'all1700' | 'custom')}>
+                                    <option value="all1700">全段1700mm</option>
+                                    <option value="custom">一部を指定する</option>
+                                </InputGroup>
+                                {config.heightMode === 'custom' && (
+                                    <div className="space-y-2 pt-2 border-t border-green-200 mt-2">
+                                        {config.customHeights.map((row, index) => (
+                                            <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                                                <InputGroup label={`高さ`} hideLabel as="select" value={row.height} onChange={e => handleCustomHeightChange(index, 'height', parseInt(e.target.value))}>
+                                                    <option value={1700}>1700</option>
+                                                    <option value={1200}>1200</option>
+                                                    <option value={900}>900</option>
+                                                    <option value={600}>600</option>
+                                                    <option value={400}>400</option>
+                                                </InputGroup>
+                                                <InputGroup label={`段数`} hideLabel type="number" value={row.count} min={1} onChange={e => handleCustomHeightChange(index, 'count', parseInt(e.target.value) || 1)} />
+                                                {config.customHeights.length > 1 && <button onClick={() => removeCustomHeightRow(index)} className="text-red-500 hover:text-red-700 font-bold">✖️</button>}
+                                            </div>
+                                        ))}
+                                        <button onClick={addCustomHeightRow} className="text-sm text-green-700 hover:text-green-800 font-semibold mt-2">+ 行を追加</button>
+                                        {validation.customHeightStatus === 'under' && <Alert type="warning" message={`現在 ${config.levelCount - validation.remainingLevels} 段 指定済（残り ${validation.remainingLevels} 段）`} />}
+                                        {validation.customHeightStatus === 'over' && <Alert type="error" message={`段数が超過しています！`} />}
+                                        {validation.customHeightStatus === 'ok' && <Alert type="success" message="指定段数が一致しました" />}
+                                    </div>
+                                )}
+                                <div className="pt-2 text-sm font-medium text-gray-600">
+                                    <div>足場の総高さ: H {totalHeight} mm</div>
+                                    <div>（ジャッキ含まず）</div>
                                 </div>
-                            )}
-                            <div className="pt-2 text-sm font-medium text-gray-600">
-                                <div>足場の総高さ: H {totalHeight} mm</div>
-                                <div>（ジャッキ含まず）</div>
+                            </div>
+                            {/* 枠方向・階段設置 */}
+                            <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
+                                <h4 className="font-semibold text-green-800">◎ 枠方向</h4>
+                                <InputGroup
+                                    label="枠幅"
+                                    as="select"
+                                    value={config.frameWidth}
+                                    onChange={e => setConfigField('frameWidth', parseInt(e.target.value) as 450 | 600 | 900 | 1200)}
+                                >
+                                    <option value={450}>450mm</option>
+                                    <option value={600}>600mm</option>
+                                    <option value={900}>900mm</option>
+                                    <option value={1200}>1200mm</option>
+                                </InputGroup>
+
+                                {/* 階段設置 */}
+                                <div className="mt-4">
+                                    <h4 className="font-semibold text-green-800">◎ 階段設置</h4>
+                                    <InputGroup label="" as="select" value={config.stairMode} onChange={e => setConfigField('stairMode', e.target.value as 'none' | 'notTop' | 'custom')}>
+                                        <option value="none">設置しない</option>
+                                        <option value="notTop">設置する（最上段以外）</option>
+                                        <option value="custom">設置する（指定段のみ）</option>
+                                    </InputGroup>
+                                    {config.stairMode === 'custom' && (
+                                        <div className="ml-4 mt-2">
+                                            <InputGroup label="段番号 (カンマ区切り)" placeholder="例: 1,2,4" value={config.stairLevels} onChange={e => setConfigField('stairLevels', e.target.value)} />
+                                        </div>
+                                    )}
+                                    {config.stairMode !== 'none' && config.stairSpanCount > 0 && (
+                                        <div className="ml-4 mt-2">
+                                            <InputGroup label="階段箇所数" type="number" value={config.stairSpanCount} onChange={e => setConfigField('stairSpanCount', parseInt(e.target.value) || 1)} min={1} />
+                                        </div>
+                                    )}
+                                    {/* 枠幅が450/600/900の時に階段ありの場合、拡幅選択を表示 */}
+                                    {config.stairMode !== 'none' && config.stairSpanCount > 0 && config.frameWidth !== 1200 && (
+                                        <div className="ml-4 mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                            <label className="flex items-center space-x-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={config.stairFrameWidening}
+                                                    onChange={e => setConfigField('stairFrameWidening', e.target.checked)}
+                                                    className="w-4 h-4"
+                                                />
+                                                <span className="text-sm text-gray-700">階段部4列を1200枠に拡幅する</span>
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </Card>
+                    </Card>
+                </fieldset>
+            </div>
 
-                <Card title="個別部材の設定">
+            {/* 中段２：個別部材の設定（1列） */}
+            <fieldset disabled={isAnalyzing || (blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
+                <Card title="個別部材の設定" defaultOpen>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
                         {/* Jack Base + Anti + Toeboard */}
                         <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-100">
@@ -257,19 +395,6 @@ export const InputForm: React.FC<InputFormProps> = ({
                                 </div>
                             )}
 
-                            {/* 階段設置 */}
-                            <h4 className="font-semibold text-green-800 mt-6">◎ 階段設置</h4>
-                            <InputGroup label="" as="select" value={config.stairMode} onChange={e => setConfigField('stairMode', e.target.value as 'none' | 'notTop' | 'custom')}>
-                                <option value="none">設置しない</option>
-                                <option value="notTop">設置する（最上段以外）</option>
-                                <option value="custom">設置する（指定段のみ）</option>
-                            </InputGroup>
-                            {config.stairMode === 'custom' && (
-                                <div className="ml-4">
-                                    <InputGroup label="段番号 (カンマ区切り)" placeholder="例: 1,2,4" value={config.stairLevels} onChange={e => setConfigField('stairLevels', e.target.value)} />
-                                </div>
-                            )}
-
                             {/* 外周シート */}
                             <h4 className="font-semibold text-green-800 mt-6">◎ 外周シート</h4>
                             <InputGroup label="" as="select" value={config.perimeterSheetMode} onChange={e => setConfigField('perimeterSheetMode', e.target.value as 'none' | 'required')}>
@@ -355,7 +480,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                     </div>
                 </Card>
 
-                <Card title="📝 フリーメモ">
+                <Card title="📝 フリーメモ" defaultOpen>
                     <div className="p-4">
                         <textarea
                             className="w-full p-3 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-150 ease-in-out"

@@ -50,46 +50,13 @@ export const AIPdfExtractor: React.FC<AIPdfExtractorProps> = ({ isAnalyzing, ana
 
 return (
     <div className="flex flex-col md:flex-row gap-6 items-stretch">
-        {/* 左カード：解説図 */}
-            <Card title="入力フォームの解説" defaultOpen className="w-full md:w-1/2">
-            <div className="flex justify-center items-center gap-6 p-4 h-full">
-                <div className="flex-1 flex justify-center">
-                <img
-                    src="/assets/立面図.jpg"
-                    alt="立面図"
-                    className="h-auto max-h-64 w-auto object-contain"
-                />
-                </div>
-                <div className="flex-1 flex justify-center">
-                <img
-                    src="/assets/平面図.jpg"
-                    alt="平面図"
-                    className="h-auto max-h-64 w-auto object-contain"
-                />
-                </div>
-            </div>
-
-            {/* ← ここから追加 *
-            <div className="px-4 pb-4 space-y-1">
-                <p className="text-sm text-gray-700">
-                <span className="mr-1">⚠️</span>
-                片面：ブレス+巾木、片面：ブレス+下桟（+メッシュシート）で算出
-                </p>
-                <p className="text-sm text-gray-700">
-                <span className="mr-1">⚠️</span>
-                敷板は足場全長から4m割+余りで算出（過剰寄り）
-                </p>
-            </div>
-             ← ここまで追加 */}
-            </Card>
-
-        {/* 右カード：AIフォーム */}
-        <Card title="🤖 図面/画像から自動入力 (AI)" defaultOpen className="w-full md:w-1/2">
             <div className="p-4 space-y-4 h-full flex flex-col">
                 <p className="text-sm text-gray-600">
-                    PDF、JPEG、PNG形式の足場図をアップロードすると、AIがスパン数や段数などの基本情報を自動で読み取り、以下の項目に入力します。
+                    AIがスパン数や段数などの大枠情報を読み取り、以下の項目に入力します。（PDF、jpeg、png）
                 </p>
-
+                <p className="text-sm font-bold text-gray-700">
+                    設計図や施工図のアップロードは各機密情報の取扱いを守った上でご利用ください。
+                </p>
                 {/* ファイル選択 */}
                 <div className="flex flex-col space-y-2">
                     <div className="flex items-center space-x-4 p-4 border-2 border-dashed border-green-300 rounded-lg bg-green-50">
@@ -154,7 +121,6 @@ return (
                 {analysisSuccess && <Alert type="success" message={analysisSuccess} />}
                 {analysisError && <Alert type="error" message={analysisError} />}
             </div>
-        </Card>
     </div>
 );
 };

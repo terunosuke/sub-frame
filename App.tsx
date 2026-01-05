@@ -4,7 +4,7 @@ import { InputForm } from './components/InputForm';
 import { ConfirmationTab } from './components/ConfirmationTab';
 import { ResultsTab } from './components/ResultsTab';
 import { HistoryTab } from './components/HistoryTab';
-import type { ScaffoldingConfig, CustomHeight, HistoryEntry } from './types';
+import type { ScaffoldingConfig, CustomHeight, HistoryEntry, BlockGridState } from './types';
 import { useScaffoldingCalculator } from './hooks/useScaffoldingCalculator';
 import 'react-tabs/style/react-tabs.css';
 import { analyzeScaffoldingFile } from './utils/gemini';
@@ -13,6 +13,18 @@ import { validateAIResponse } from './utils/aiResponseValidator';
 
 // 薄い緑を基調とした統一されたカラーパレット
 const customStyles = `
+    /* 数値入力のスピナー（▲▼）をモバイルのみ非表示、PCでは表示 */
+    @media (max-width: 1024px) {
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    }
+
     .react-tabs__tab { /* 通常タブ */
         padding: 12px 24px;
         border-radius: 8px 8px 0 0;
@@ -58,6 +70,8 @@ const App: React.FC = () => {
     const [analysisError, setAnalysisError] = useState<string | null>(null);
     const [analysisSuccess, setAnalysisSuccess] = useState<string | null>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [blockGrid, setBlockGrid] = useState<BlockGridState | null>(null);
+    const [isGridApplied, setIsGridApplied] = useState(false);
 
     const [config, setConfig] = useState<ScaffoldingConfig>({
         span600: 0,
@@ -84,6 +98,7 @@ const App: React.FC = () => {
         stairMode: 'none',
         stairLevels: '',
         stairSpanCount: 1,
+        stairFrameWidening: false,
         wallTieMode: 'none',
         wallTieLevelMode: 'all',
         wallTieLevelCount: 0,
@@ -105,6 +120,7 @@ const App: React.FC = () => {
             "900": 0,
             "1200": 0
         },
+        frameWidth: 1200,
         faceCount: 0,
         faceWidth: 900
     });
@@ -228,22 +244,87 @@ const App: React.FC = () => {
         }
     }, []);
 
+    // グリッド→config変換関数
+    const convertGridToConfig = useCallback((
+        grid: BlockGridState,
+        currentConfig: ScaffoldingConfig
+    ): Partial<ScaffoldingConfig> => {
+        // 1. 段数設定
+        const levelCount = grid.levels;
+
+        // 2. 各スパンサイズの個数を集計（階段は除く）
+        const spanCounts = {
+            600: grid.spanSizes.filter(s => s === 600).length,
+            900: grid.spanSizes.filter(s => s === 900).length,
+            1200: grid.spanSizes.filter(s => s === 1200).length,
+            1500: grid.spanSizes.filter(s => s === 1500).length,
+            1800: grid.spanSizes.filter(s => s === 1800).length,
+        };
+
+        // 階段のセット数を計算（階段は2列で1セット）
+        const stairColumns = grid.spanSizes.filter(s => s === 'stair').length;
+        const stairSpanCount = Math.floor(stairColumns / 2);
+
+        // 3. 床ありの段番号を抽出
+        const antiLevels = grid.floors
+            .map((hasFloor, index) => hasFloor ? index + 1 : null)
+            .filter(level => level !== null) as number[];
+
+        return {
+            levelCount,
+            span600: spanCounts[600],
+            span900: spanCounts[900],
+            span1200: spanCounts[1200],
+            span1500: spanCounts[1500],
+            span1800: spanCounts[1800],
+            stairSpanCount,
+            stairMode: stairSpanCount > 0 ? 'notTop' : 'none',
+            stairLevels: stairSpanCount > 0 ? Array.from({ length: levelCount - 1 }, (_, i) => i + 1).join(',') : '',
+            frameCols: { [grid.frameWidth.toString()]: 1 },
+            frameWidth: grid.frameWidth,
+            stairFrameWidening: grid.wideningEnabled && grid.frameWidth !== 1200 && stairSpanCount > 0,
+            antiMode: antiLevels.length > 0 ? 'custom' : 'none',
+            antiLevels: antiLevels.join(','),
+            heightMode: 'all1700',
+            customHeights: [{ height: 1700, count: grid.levels }],
+        };
+    }, []);
+
+    // ブロックグリッド確定ハンドラ
+    const handleApplyBlockGrid = useCallback(() => {
+        if (!blockGrid) return;
+        const updates = convertGridToConfig(blockGrid, config);
+        setConfig(prev => ({ ...prev, ...updates }));
+        setIsGridApplied(true); // 確定済みフラグを立てて既存フォームを編集可能にする
+    }, [blockGrid, config, convertGridToConfig]);
+
+    // グリッドリセット時のハンドラ（再編集用）
+    const handleResetGrid = useCallback(() => {
+        setBlockGrid(null);
+        setIsGridApplied(false);
+    }, []);
+
     const { results, validation } = useScaffoldingCalculator(config);
 
     const renderTabPanel = (index: number, Component: React.ElementType) => (
         <TabPanel key={index}>
             <div className="p-4 md:p-8 bg-white rounded-lg shadow-sm border border-green-100">
-                <Component 
-                    config={config} 
-                    setConfigField={setConfigField} 
-                    setCustomHeights={setCustomHeights} 
-                    setPillarSelection={setPillarSelection} 
-                    results={results} 
+                <Component
+                    config={config}
+                    setConfigField={setConfigField}
+                    setCustomHeights={setCustomHeights}
+                    setPillarSelection={setPillarSelection}
+                    results={results}
                     validation={validation}
                     isAnalyzing={isAnalyzing}
                     analysisError={analysisError}
                     analysisSuccess={analysisSuccess}
                     onAnalyzeFile={handleAnalyzeFile}
+                    blockGrid={blockGrid}
+                    setBlockGrid={setBlockGrid}
+                    onApplyBlockGrid={handleApplyBlockGrid}
+                    isGridApplied={isGridApplied}
+                    onResetGrid={handleResetGrid}
                 />
             </div>
         </TabPanel>

@@ -27,7 +27,17 @@ export const InputGroup: React.FC<InputGroupProps> = ({ label, as = 'input', hid
                 </div>
             );
         }
-        return <input className={commonClasses} inputMode="numeric" pattern="[0-9]*" {...(props as InputProps)} />;
+        const { onFocus, ...restProps } = props as InputProps;
+        return <input
+            className={commonClasses}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            onFocus={(e) => {
+                e.target.select(); // フォーカス時に全選択
+                onFocus?.(e); // 元のonFocusハンドラーがあれば実行
+            }}
+            {...restProps}
+        />;
     };
 
     if (as === 'checkbox') {

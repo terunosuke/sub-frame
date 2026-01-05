@@ -309,22 +309,24 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
         }
         
         // 妻側手すり（1段手すりに変更）
+        // アンチの設置段数と連動
         const tsumaHandrail_items: { [key: string]: number } = {};
         const tsumaSides = config.tsumaCount;
-        const levels = config.levelCount;
+        const tsumaLevels = antiLevelsResolved.length; // アンチと同じ段数
 
         for (const [width, colCount] of Object.entries(frameCols)) {
             if (colCount > 0) {
-                const qty = colCount * levels * tsumaSides * 1; // 1枚手すり
+                const qty = colCount * tsumaLevels * tsumaSides * 1; // アンチと同じ段数
                 tsumaHandrail_items[`妻側手すり（${width}）`] = qty;
             }
         }
-        
+
         // 妻側巾木
+        // アンチの設置段数と連動
         const tsumaToeboard_items: { [key: string]: number } = {};
         for (const [width, colCount] of Object.entries(frameCols)) {
             if (colCount > 0) {
-                const qty = colCount * levels * tsumaSides * 1; // 巾木は1段分
+                const qty = colCount * tsumaLevels * tsumaSides * 1; // アンチと同じ段数
                 tsumaToeboard_items[`妻側巾木（${width}）`] = qty;
             }
         }
@@ -347,7 +349,8 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
                 // 枠幅ごとにメッシュシートを計算（選択された妻側の面数分）
                 for (const [width, colCount] of Object.entries(frameCols)) {
                     if (colCount > 0) {
-                        const key = `メッシュシート（${width}）`;
+                        // 妻側メッシュは通常のメッシュシートとキーが被らないように「妻側」プレフィックスを付与
+                        const key = `妻側メッシュシート（${width}）`;
                         const qty = colCount * sheetsPerTsuma * config.tsumaSheetCount;
                         tsumaSheet_items[key] = (tsumaSheet_items[key] || 0) + qty;
                     }
@@ -387,8 +390,11 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
             ...anti_keys,
             ...toeboard_keys,
             "階段",
+            "階段部調整用拡幅わく（ST129J）",
             "KTS16", "KTS20", "KTS30", "KTS45", "KTS60", "KTS80", "KTS100",
             "層間ネット", "層間ネットブラケット",
+            // 妻側メッシュシートを通常メッシュシートより前に表示
+            "妻側メッシュシート（450）", "妻側メッシュシート（600）", "妻側メッシュシート（900）", "妻側メッシュシート（1200）", "妻側メッシュシート（1500）", "妻側メッシュシート（1800）",
             "メッシュシート（600）", "メッシュシート（900）", "メッシュシート（1200）", "メッシュシート（1500）", "メッシュシート（1800）"
         ];
 
@@ -406,7 +412,25 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
             if (config.taiko80 > 0) coefsCombined["タイコ（80）"] = config.taiko80;
         }
         if (stair_count > 0) coefsCombined["階段"] = stair_count;
-        
+
+        // 階段部の枠幅拡幅計算（枠幅が450/600/900で階段ありの場合）
+        if (config.stairFrameWidening && config.stairSpanCount > 0 && stair_count > 0 && config.frameWidth !== 1200) {
+            // 階段部調整用拡幅わく：階段箇所×2×全段数
+            const wideningFrameCount = config.stairSpanCount * 2 * config.levelCount;
+            coefsCombined["階段部調整用拡幅わく（ST129J）"] = wideningFrameCount;
+
+            // 建枠(1200/1700)を追加：階段箇所×2×全段数
+            const frame1200Count = config.stairSpanCount * 2 * config.levelCount;
+            coefsCombined["建枠（1200/1700）"] = (coefsCombined["建枠（1200/1700）"] || 0) + frame1200Count;
+
+            // 元の枠幅の建枠を減らす：元の数-（階段箇所×4×全段数）
+            const reductionCount = config.stairSpanCount * 4 * config.levelCount;
+            const originalFrameKey = `建枠（${config.frameWidth}/1700）`;
+            if (coefsCombined[originalFrameKey]) {
+                coefsCombined[originalFrameKey] = Math.max(0, coefsCombined[originalFrameKey] - reductionCount);
+            }
+        }
+
         // 他のカテゴリの部材をマージ
         Object.assign(
             coefsCombined,
@@ -457,40 +481,48 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
             "⚠️ 超過（車両を分割してください）";
             
         // 車両分割オプションの計算
-        const splitOptions: string[] = [];
-        const truck_caps = { "4tＵ": 2000, "6tＵ": 6500, "12tＵ": 12000 };
-        for (let t1 = 0; t1 <= 5; t1++) {
-            for (let t2 = 0; t2 <= 4; t2++) {
-                for (let t3 = 0; t3 <= 4; t3++) {
-                    if (t1 + t2 + t3 === 0) continue;
-                    const total_cap = t1 * truck_caps["4tＵ"] + t2 * truck_caps["6tＵ"] + t3 * truck_caps["12tＵ"];
-                    if (total_cap >= W && total_cap <= W * 1.5 && total_cap <= 48000) {
-                        const parts = [];
-                        if (t1 > 0) parts.push(`4tＵ×${t1}`);
-                        if (t2 > 0) parts.push(`6tＵ×${t2}`);
-                        if (t3 > 0) parts.push(`12tＵ×${t3}`);
-                        if (parts.length > 0) {
-                            splitOptions.push(parts.join(" + "));
-                        }
-                    }
-                }
+        let splitOptions: string[] = [];
+         const truck_caps = { "4tＵ": 2000, "6tＵ": 6500, "12tＵ": 12000 };
+         for (let t1 = 0; t1 <= 5; t1++) {
+             for (let t2 = 0; t2 <= 4; t2++) {
+                 for (let t3 = 0; t3 <= 4; t3++) {
+                     if (t1 + t2 + t3 === 0) continue;
+                     const total_cap = t1 * truck_caps["4tＵ"] + t2 * truck_caps["6tＵ"] + t3 * truck_caps["12tＵ"];
+                     if (total_cap >= W && total_cap <= W * 1.5 && total_cap <= 48000) {
+                         const parts = [];
+                         if (t1 > 0) parts.push(`4tＵ×${t1}`);
+                         if (t2 > 0) parts.push(`6tＵ×${t2}`);
+                         if (t3 > 0) parts.push(`12tＵ×${t3}`);
+                         if (parts.length > 0) {
+                             splitOptions.push(parts.join(" + "));
+                         }
+                     }
+                 }
+             }
+         }
+         splitOptions.sort((a, b) => a.length - b.length);
+         // 「4tＵ×1」のように1車しか提案が無い場合は提案を表示しない（UIでエラーマークを出すため）
+         if (splitOptions.length === 1) {
+            const only = splitOptions[0];
+            // '+' を含まず末尾が "×1" の場合を単一車両提案と見なす
+            if (!only.includes('+') && /×1$/.test(only)) {
+                splitOptions = [];
             }
         }
-        splitOptions.sort((a, b) => a.length - b.length);
-
-        // 最終的な計算結果オブジェクト
-        const results: CalculationResults = {
-            materials: final_materials,
-            totalWeight,
-            spanTotal,
-            spanMmTotal,
-            totalHeight,
-            jackBaseCount,
-            pillarText,
-            transportUnic,
-            transportFlatbed,
-            splitOptions: splitOptions.slice(0, 15)
-        };
+         
+         // 最終的な計算結果オブジェクト
+         const results: CalculationResults = {
+             materials: final_materials,
+             totalWeight,
+             spanTotal,
+             spanMmTotal,
+             totalHeight,
+             jackBaseCount,
+             pillarText,
+             transportUnic,
+             transportFlatbed,
+             splitOptions: splitOptions.slice(0, 15)
+         };
 
         return { results, validation };
     }, [config]);
