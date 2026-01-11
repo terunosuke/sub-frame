@@ -358,6 +358,67 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
             }
         }
 
+        // 階段部の枠幅拡幅計算（枠幅が450/600/900で階段ありの場合）
+        // ※frame_keys生成の前に実行する必要がある
+        console.log('🔍 階段拡幅チェック:', {
+            stairFrameWidening: config.stairFrameWidening,
+            stairSpanCount: config.stairSpanCount,
+            frameWidth: config.frameWidth,
+            stairMode: config.stairMode
+        });
+
+        if (config.stairFrameWidening && config.stairSpanCount > 0 && config.frameWidth !== 1200) {
+            console.log('✅ 階段拡幅計算を実行');
+
+            // 階段は1800スパンとして計上されている
+            // 階段1セット（2列）= 2スパン分
+            const actualStairSpans = config.stairSpanCount * 2; // 階段の実際のスパン数
+
+            // 階段2スパンには、拡張枠2本 + 1200枠3本 = 5本の枠が必要
+            // 一般化すると、階段sスパンには、拡張枠s本 + 1200枠(s+1)本 = (2s+1)本の枠が必要
+
+            // 階段部調整用拡幅わく：階段スパン数×全段数
+            const wideningFrameCount = actualStairSpans * config.levelCount;
+            coefsCombined["階段部調整用拡幅枠"] = wideningFrameCount;
+            console.log('拡幅わく:', wideningFrameCount);
+
+            // 建枠(1200/1700)を追加：(階段スパン数+1)×全段数
+            const frame1200Count = (actualStairSpans + 1) * config.levelCount;
+            frame_items["建枠（1200/1700）"] = (frame_items["建枠（1200/1700）"] || 0) + frame1200Count;
+            console.log('建枠1200:', frame1200Count);
+
+            // 元の枠幅の建枠を減らす：(拡張枠+1200枠)×全段数
+            const reductionCount = (actualStairSpans + (actualStairSpans + 1)) * config.levelCount;
+            const originalFrameKey = `建枠（${config.frameWidth}/1700）`;
+            console.log('元の建枠を減らす:', originalFrameKey, reductionCount);
+            if (frame_items[originalFrameKey]) {
+                frame_items[originalFrameKey] = Math.max(0, frame_items[originalFrameKey] - reductionCount);
+                console.log('減算後:', frame_items[originalFrameKey]);
+            }
+
+            // アンチの調整（枠幅900の場合のみ）
+            if (config.frameWidth === 900) {
+                // 階段部分のアンチを建枠900から建枠1200の構成に変更
+                // 階段は1800スパンとして計上されているので、1800スパンのアンチを調整
+                const stairSpan1800 = actualStairSpans; // 階段のスパン数（1800として計上）
+
+                // アンチ24を減らす：階段スパン数×アンチ設置段数
+                const anti24Key = `アンチ（24/1800）`;
+                const anti24Reduction = stairSpan1800 * antiLevelsResolved.length;
+                if (anti24Reduction > 0 && anti_items[anti24Key]) {
+                    anti_items[anti24Key] = Math.max(0, anti_items[anti24Key] - anti24Reduction);
+                }
+
+                // アンチ50を増やす：階段スパン数×アンチ設置段数
+                // （建枠1200では50を2枚使うが、元々1枚あるので追加で1枚）
+                const anti50Key = `アンチ（50/1800）`;
+                const anti50Addition = stairSpan1800 * antiLevelsResolved.length;
+                if (anti50Addition > 0) {
+                    anti_items[anti50Key] = (anti_items[anti50Key] || 0) + anti50Addition;
+                }
+            }
+        }
+
         // --- 4. 結果の整形 ---
 
         // サイズ順ソート関数
@@ -378,19 +439,20 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
         const tsumaHandrail_keys = sortKeysBySize(Object.keys(tsumaHandrail_items), '妻側手すり');
         const tsumaToeboard_keys = sortKeysBySize(Object.keys(tsumaToeboard_items), '妻側巾木');
 
+        // 各部材の表示順序
         const ordered_keys = [
-            "敷板（4m）", "敷板（3m）", "敷板（2m）", 
-            "ジャッキベース（20）", "ジャッキベース（40）", 
+            "敷板（4m）", "敷板（3m）", "敷板（2m）",
+            "ジャッキベース（20）", "ジャッキベース（40）",
             "タイコ（40）", "タイコ（80）",
             ...frame_keys,
+            "階段部調整用拡幅枠",
+            "階段",
             ...brace_keys,
+            ...anti_keys,
             ...handrail_keys,
+            ...toeboard_keys,
             ...tsumaHandrail_keys,
             ...tsumaToeboard_keys,
-            ...anti_keys,
-            ...toeboard_keys,
-            "階段",
-            "階段部調整用拡幅わく（ST129J）",
             "KTS16", "KTS20", "KTS30", "KTS45", "KTS60", "KTS80", "KTS100",
             "層間ネット", "層間ネットブラケット",
             // 妻側メッシュシートを通常メッシュシートより前に表示
@@ -412,24 +474,6 @@ export const useScaffoldingCalculator = (config: ScaffoldingConfig): { results: 
             if (config.taiko80 > 0) coefsCombined["タイコ（80）"] = config.taiko80;
         }
         if (stair_count > 0) coefsCombined["階段"] = stair_count;
-
-        // 階段部の枠幅拡幅計算（枠幅が450/600/900で階段ありの場合）
-        if (config.stairFrameWidening && config.stairSpanCount > 0 && stair_count > 0 && config.frameWidth !== 1200) {
-            // 階段部調整用拡幅わく：階段箇所×2×全段数
-            const wideningFrameCount = config.stairSpanCount * 2 * config.levelCount;
-            coefsCombined["階段部調整用拡幅わく（ST129J）"] = wideningFrameCount;
-
-            // 建枠(1200/1700)を追加：階段箇所×2×全段数
-            const frame1200Count = config.stairSpanCount * 2 * config.levelCount;
-            coefsCombined["建枠（1200/1700）"] = (coefsCombined["建枠（1200/1700）"] || 0) + frame1200Count;
-
-            // 元の枠幅の建枠を減らす：元の数-（階段箇所×4×全段数）
-            const reductionCount = config.stairSpanCount * 4 * config.levelCount;
-            const originalFrameKey = `建枠（${config.frameWidth}/1700）`;
-            if (coefsCombined[originalFrameKey]) {
-                coefsCombined[originalFrameKey] = Math.max(0, coefsCombined[originalFrameKey] - reductionCount);
-            }
-        }
 
         // 他のカテゴリの部材をマージ
         Object.assign(

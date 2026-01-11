@@ -182,7 +182,7 @@ export const InputForm: React.FC<InputFormProps> = ({
                     </div>
                 </Card>
 
-                <fieldset disabled={isAnalyzing || (blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
+                <fieldset disabled={isAnalyzing || (inputAssistMode === 'draw' && blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
                     <Card title="大枠の設定" defaultOpen>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
                         {/* 1列目：スパン方向 */}
@@ -287,7 +287,7 @@ export const InputForm: React.FC<InputFormProps> = ({
             </div>
 
             {/* 中段２：個別部材の設定（1列） */}
-            <fieldset disabled={isAnalyzing || (blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
+            <fieldset disabled={isAnalyzing || (inputAssistMode === 'draw' && blockGrid !== null && !isGridApplied)} className="disabled:opacity-60 transition-opacity">
                 <Card title="個別部材の設定" defaultOpen>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
                         {/* Jack Base + Anti + Toeboard */}

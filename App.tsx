@@ -252,18 +252,18 @@ const App: React.FC = () => {
         // 1. 段数設定
         const levelCount = grid.levels;
 
-        // 2. 各スパンサイズの個数を集計（階段は除く）
+        // 階段のセット数を計算（階段は2列で1セット）
+        const stairColumns = grid.spanSizes.filter(s => s === 'stair').length;
+        const stairSpanCount = Math.floor(stairColumns / 2);
+
+        // 2. 各スパンサイズの個数を集計（階段は1800スパンとして分別）
         const spanCounts = {
             600: grid.spanSizes.filter(s => s === 600).length,
             900: grid.spanSizes.filter(s => s === 900).length,
             1200: grid.spanSizes.filter(s => s === 1200).length,
             1500: grid.spanSizes.filter(s => s === 1500).length,
-            1800: grid.spanSizes.filter(s => s === 1800).length,
+            1800: grid.spanSizes.filter(s => s === 1800 || s === 'stair').length,
         };
-
-        // 階段のセット数を計算（階段は2列で1セット）
-        const stairColumns = grid.spanSizes.filter(s => s === 'stair').length;
-        const stairSpanCount = Math.floor(stairColumns / 2);
 
         // 3. 床ありの段番号を抽出
         const antiLevels = grid.floors
